@@ -1,3 +1,5 @@
+This is a piece of code that find the 'golden nonce'. It is run on multiple AWS server to achieve parallelism for a faster runtime.
+
 user input: N, the number of VM to run the code on
 (or the number of hours the user want before computing the nonce value)
 user input: D, the difficulty of nonce discovery
