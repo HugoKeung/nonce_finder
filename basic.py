@@ -2,6 +2,7 @@ import binascii
 import hashlib
 import boto3
 
+
 #turn string to binary
 def tobin(st):
     return ''.join('{:08b}'.format(b) for b in st.encode('ascii'))
