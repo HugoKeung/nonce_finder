@@ -1,7 +1,14 @@
 import binascii
 import hashlib
 import boto3
+import time
+import sys
 
+SQSURL = 'https://sqs.us-east-1.amazonaws.com/971030030830/16187queue'
+IAMARN = 'arn:aws:iam::971030030830:instance-profile/ec2s3sqs'
+IAMNAME = 'ec2s3sqs'
+S3SCRIPT = 's3://16187tester/ec2.py'
+SCRIPTNAME = 'ec2.py'
 
 #turn string to binary
 def tobin(st):
@@ -32,27 +39,110 @@ def goldennonce(st, d):
 #this function close all the VMs, detail of the function to be implemented
 def shutdown():
     print('shut down')
+    instances = ec2.instances.filter(
+        Filters=[{'Name': 'instance-state-name', 'Values': ['running']}]
+    )
+    for instance in instances:
+        print(instance.id, instance.instance_type)
+        instance.terminate()
     return 0
 
 #launch number of VM specified by the user. To be implemented
-def launchVM():
+def launchVM(n, start, end, queue):
     print('launching VM')
+    #is all t2.micro by default
+    userdata = '''
+    #!/bin/bash
+    aws s3 cp {0} .
+    sudo yum install python3 -y
+    yes | sudo pip3 install boto3
+    python3 {1} {2} {3} {4}
+    '''.format(S3SCRIPT, SCRIPTNAME, start, end, queue)
+    ec2.create_instances(
+        ImageId='ami-00068cd7555f543d5', 
+        InstanceType='t2.micro',  
+        MinCount=1, MaxCount=n, 
+        UserData = userdata, 
+        IamInstanceProfile = {
+            'Arn': IAMARN
+        }
+    )
     return 0
 
+
+def reportBack():
+    print('reporting back to SQS')
+    response = sqsclient.send_message(
+        QueueUrl= SQSURL,
+        MessageBody = 'this is the message body'
+    )
+
+def receiveMessage(url):
+    response = sqsclient.receive_message(
+        QueueUrl = url,
+        WaitTimeSeconds = 2
+    )
+    
+    #print(response.get('Messages')[0].get('Body'))
+    #if (response.get('Message')[0].get('Body').charAt(0)== '!'):
+     #       shutdown()
+    
+    #include if match message, then delete queue
+  
+
 #SECRET KEY TO BE PUT IN ENVIRONMENT AFTER TESTING
+#Can put script. in S3 then use shell script to initiate the python script when setting up new instances
+#if message matches then instantly terminate VM
+#queue is also deleted to save resources
+
 if __name__ == '__main__':
-    ec2 = boto3.resource('ec2', region_name='us-east-1', aws_accesskey_id='', aws_secret_access_key='')
-    instance = ec2.create_instances(
-     ImageId='ami-1e299d7e',
-     MinCount=1,
-     MaxCount=1,
-     InstanceType='t2.micro')
-    print(instance[0].id)
-    print(instance)
+    
+    if (len(sys.argv)!=2):
+        print('wrong arg')
+        exit()
+    
+    ec2 = boto3.resource('ec2')
+    sqs = boto3.resource('sqs')
+    s3client = boto3.client('s3')
+    sqsclient = boto3.client('sqs')
+    VmNum = int(sys.argv[1])
+    NonceRange = 2147483647
+    #NonceRange = 4000
+
+    queue = sqs.create_queue(QueueName = '16187queue')
+    
+    for i in range (0, VmNum):
+        start = int(NonceRange/VmNum * i)
+        end = int(NonceRange/VmNum * (i+1))
+        launchVM(1,start,end, queue.url)
+    
+    receiveMessage(queue.url)
+
+    #use following 2 lines to download the script from s3
+ #   s3 = boto3.resource('s3')
+   # s3.meta.client.download_file('16187tester', 'sample.txt', 'sample.txt')
+ #   sqsclient.send_message()
+
+ 
+
+    #below send object to s3, can put message in body of string
+
+  #  response = s3client.put_object(
+   #     Body = 'sample.txt',
+    #    Bucket='16187tester',
+     #   Key='sample.txt'
+   # )
+ #   ec2.instances.filter(InstanceIds=['i-026abd83164f47af9']).terminate()
+    #launchVM(3)
+  #  response = s3client.get_object(
+   #     Bucket='16187tester',
+    #    Key = 'test.py.txt'
+    #)
+  #  print ( response)
+
+
+        #below how to find goldennonce
 #    for i in range (0, 3600):
  #       if goldennonce(wholehashoperation('COMSM0010cloud', i), 3) == 1:
   #          print('above is golden nonce, the nonce number is ', i)
    #         shutdown()
-
-
-
