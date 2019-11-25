@@ -26,7 +26,7 @@ def addnonce(st, i):
 
 #First nonce is added, with nonce being 'i', then it is turned into binary and SHA256 is applied twice
 def wholehashoperation(st, i):
-    print(tosha(tosha(tobin(addnonce(st, i)))))
+#    print(tosha(tosha(tobin(addnonce(st, i)))))
     return tosha(tosha(tobin(addnonce(st,i))))
 
 
@@ -40,30 +40,67 @@ def goldennonce(st, d):
 
 def reportBack(url, message):
     print('reporting back to SQS')
+    #it is only calling this function when either nonce is found or all numbers allocated are tested
+    sendlog()
     response = sqsclient.send_message(
         QueueUrl= url,
         MessageBody = message
     )
+    
 
+def receiveMessage(url):
+    response = sqsclient.receive_message(
+        QueueUrl = url,
+        WaitTimeSeconds = 5
+    )
+    #print(response.get('Messages')[0].get('Body'))
+    if 'Messages' in response:
+        if (response.get('Messages')[0].get('Body')[0]== '!'):
+            #this means a nonce is found, so now pack up and go
+            sendlog()
+            #shutdown()
+            exit()
+
+def sendlog():
+    log = open('!{0}.txt'.format(start), 'w')
+  #  log.write('Time:{0} Number tested:{1} Nonce found:{2}'.format(totalTime, numTested, nonceFound))
+    log.write(str(totalTime)+':'+str(numTested)+':'+str(nonceFound))
+    
+    log.close()
+    s3 = boto3.resource('s3')
+    s3.Bucket('16187tester').upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
+    print('log uploaded')
 
 #Can put script. in S3 then use shell script to initiate the python script when setting up new instances
 #need to 1. send log to s3 after complete. 2. send message to SQS
 #maybe create queue name which is random so there's no 60sec restriction
 
-
+#TODO receive message sync
 if __name__ == '__main__':
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+    print('!!!!!!!!!starting operation')
     sqsclient = boto3.client('sqs')
+
+    numTested = 0
+    totalTime = 0
+    nonceFound = 0
 
     start = int(sys.argv[1])
     end = int(sys.argv[2])
     queueurl = sys.argv[3]
     #t0 = time.clock()
     t0 = time.process_time()
-    for i in range (start, end):
-        if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
-            print('above is golden nonce, the nonce number is ', i)
-            totalTime = time.process_time()-t0
-            #totalTime = time.clock()-t0
-            reportBack(queueurl, '!nonce number is '+ str(i) + 'time took is ' + str(totalTime))
-            break
+    while nonceFound == 0:
+        for i in range (start, end):
+            numTested = numTested + 1
+            #receiveMessage(queueurl)
+            if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
+                print('above is golden nonce, the nonce number is ', i)
+                totalTime = time.process_time()-t0
+                nonceFound = 1
+                #totalTime = time.clock()-t0
+                reportBack(queueurl, '!nonce number is '+ str(i) + 'time took is ' + str(totalTime))
+                exit()
+        print('no nonce')  
+        reportBack(queueurl, 'No nonce found')
+        exit()

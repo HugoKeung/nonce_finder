@@ -3,6 +3,7 @@ import hashlib
 import boto3
 import time
 import sys
+import os
 
 SQSURL = 'https://sqs.us-east-1.amazonaws.com/971030030830/16187queue'
 IAMARN = 'arn:aws:iam::971030030830:instance-profile/ec2s3sqs'
@@ -43,7 +44,7 @@ def shutdown():
         Filters=[{'Name': 'instance-state-name', 'Values': ['running']}]
     )
     for instance in instances:
-        print(instance.id, instance.instance_type)
+        #print(instance.id, instance.instance_type)
         instance.terminate()
     return 0
 
@@ -53,10 +54,13 @@ def launchVM(n, start, end, queue):
     #is all t2.micro by default
     userdata = '''
     #!/bin/bash
+    echo '!!!!!!!!!!!!!!!!!! pulling form S3'
     aws s3 cp {0} .
     sudo yum install python3 -y
-    yes | sudo pip3 install boto3
+    yes | pip3 install --user boto3
+    echo '!!!!!!!!!!finish loading boto3'
     python3 {1} {2} {3} {4}
+    echo '!!!!!!!!!!!! ran python script'
     '''.format(S3SCRIPT, SCRIPTNAME, start, end, queue)
     ec2.create_instances(
         ImageId='ami-00068cd7555f543d5', 
@@ -80,15 +84,49 @@ def reportBack():
 def receiveMessage(url):
     response = sqsclient.receive_message(
         QueueUrl = url,
-        WaitTimeSeconds = 2
+        WaitTimeSeconds = 5
     )
+
+    #nonceFound = 1
     
     #print(response.get('Messages')[0].get('Body'))
-    #if (response.get('Message')[0].get('Body').charAt(0)== '!'):
-     #       shutdown()
-    
-    #include if match message, then delete queue
-  
+    if 'Messages' in response:
+        if (response.get('Messages')[0].get('Body')[0]== '!'):
+            print(response.get('Messages')[0].get('Body'))
+            nonceFound = 1
+            #wait for few seconds before pull data
+            time.sleep(5)
+            sqsclient.purge_queue(QueueUrl=queue.url)
+            getlog()
+
+            shutdown()
+            quitprog()
+
+def getlog():
+    s3client = boto3.client('s3')
+    s3 = boto3.resource('s3')
+    totaltime = 0 
+    totalnum = 0
+    #now get all s3 files that ar relevant and do maths in it
+    list = s3client.list_objects(
+        Bucket='16187tester',
+        Prefix='result'
+    )['Contents']
+ #   print(list)
+    for i in list:
+        obj = s3.Object('16187tester', i['Key'])
+        text = obj.get()['Body'].read().decode('utf-8')
+        totaltime = totaltime + float(text.split(':')[0])
+        totalnum = totalnum + int(text.split(':')[1])
+        obj.delete()
+
+    print('Total VM time took is: '+str(totaltime) + 'Total number tested is: '+str(totalnum))
+    #remove everything after finish getting log
+
+def quitprog():
+    print ('total time took (including spinning up VM): ' + str(time.process_time()-t0))
+    exit()
+
 
 #SECRET KEY TO BE PUT IN ENVIRONMENT AFTER TESTING
 #Can put script. in S3 then use shell script to initiate the python script when setting up new instances
@@ -96,11 +134,11 @@ def receiveMessage(url):
 #queue is also deleted to save resources
 
 if __name__ == '__main__':
-    
+    nonceFound = 0
     if (len(sys.argv)!=2):
         print('wrong arg')
         exit()
-    
+    t0 = time.process_time()
     ec2 = boto3.resource('ec2')
     sqs = boto3.resource('sqs')
     s3client = boto3.client('s3')
@@ -115,34 +153,6 @@ if __name__ == '__main__':
         start = int(NonceRange/VmNum * i)
         end = int(NonceRange/VmNum * (i+1))
         launchVM(1,start,end, queue.url)
-    
-    receiveMessage(queue.url)
+    while (nonceFound == 0):
+        receiveMessage(queue.url)
 
-    #use following 2 lines to download the script from s3
- #   s3 = boto3.resource('s3')
-   # s3.meta.client.download_file('16187tester', 'sample.txt', 'sample.txt')
- #   sqsclient.send_message()
-
- 
-
-    #below send object to s3, can put message in body of string
-
-  #  response = s3client.put_object(
-   #     Body = 'sample.txt',
-    #    Bucket='16187tester',
-     #   Key='sample.txt'
-   # )
- #   ec2.instances.filter(InstanceIds=['i-026abd83164f47af9']).terminate()
-    #launchVM(3)
-  #  response = s3client.get_object(
-   #     Bucket='16187tester',
-    #    Key = 'test.py.txt'
-    #)
-  #  print ( response)
-
-
-        #below how to find goldennonce
-#    for i in range (0, 3600):
- #       if goldennonce(wholehashoperation('COMSM0010cloud', i), 3) == 1:
-  #          print('above is golden nonce, the nonce number is ', i)
-   #         shutdown()
