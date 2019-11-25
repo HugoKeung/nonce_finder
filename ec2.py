@@ -4,6 +4,8 @@ import boto3
 import sys
 import time
 import os
+import threading
+import _thread
 
 BLOCK = 'COMSM0010cloud'
 LEADINGZERO = 2
@@ -49,9 +51,10 @@ def reportBack(url, message):
     
 
 def receiveMessage(url):
+    print('listening to SQS')
     response = sqsclient.receive_message(
         QueueUrl = url,
-        WaitTimeSeconds = 5
+        WaitTimeSeconds = 1
     )
     #print(response.get('Messages')[0].get('Body'))
     if 'Messages' in response:
@@ -59,7 +62,11 @@ def receiveMessage(url):
             #this means a nonce is found, so now pack up and go
             sendlog()
             #shutdown()
-            exit()
+            os._exit(1)
+
+def receiveMessageInThread(url):
+    while (1):
+        receiveMessage(url)
 
 def sendlog():
     log = open('!{0}.txt'.format(start), 'w')
@@ -78,7 +85,7 @@ def sendlog():
 #TODO receive message sync
 if __name__ == '__main__':
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-    print('!!!!!!!!!starting operation')
+
     sqsclient = boto3.client('sqs')
 
     numTested = 0
@@ -90,17 +97,27 @@ if __name__ == '__main__':
     queueurl = sys.argv[3]
     #t0 = time.clock()
     t0 = time.process_time()
-    while nonceFound == 0:
-        for i in range (start, end):
-            numTested = numTested + 1
-            #receiveMessage(queueurl)
-            if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
-                print('above is golden nonce, the nonce number is ', i)
-                totalTime = time.process_time()-t0
-                nonceFound = 1
-                #totalTime = time.clock()-t0
-                reportBack(queueurl, '!nonce number is '+ str(i) + 'time took is ' + str(totalTime))
-                exit()
-        print('no nonce')  
-        reportBack(queueurl, 'No nonce found')
-        exit()
+    
+    try:
+        threading.Thread(target = receiveMessageInThread, args=(queueurl,)).start()
+    except:
+        print ('unable to start thread, calculation will not stop till the end')
+
+    for i in range (start, end):
+        numTested = numTested + 1
+        print('testing num')    
+        time.sleep(1)
+        if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
+            print('above is golden nonce, the nonce number is ', i)
+            totalTime = time.process_time()-t0
+            nonceFound = 1
+            #totalTime = time.clock()-t0
+
+            reportBack(queueurl, '!nonce number is '+ str(i) + 'time took is ' + str(totalTime))
+            exit()
+    print('no nonce')  
+    reportBack(queueurl, 'No nonce found')
+    exit()
+
+
+

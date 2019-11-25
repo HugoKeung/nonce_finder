@@ -82,9 +82,10 @@ def reportBack():
     )
 
 def receiveMessage(url):
+    print('listening to queue')
     response = sqsclient.receive_message(
         QueueUrl = url,
-        WaitTimeSeconds = 5
+        WaitTimeSeconds = 20
     )
 
     #nonceFound = 1

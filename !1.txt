@@ -1,1 +1,1 @@
-Time:0 Number tested:99 Nonce found:00:99:0
+0:13:0
