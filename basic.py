@@ -4,6 +4,7 @@ import boto3
 import time
 import sys
 import os
+import timeit
 
 SQSURL = 'https://sqs.us-east-1.amazonaws.com/971030030830/16187queue'
 IAMARN = 'arn:aws:iam::971030030830:instance-profile/ec2s3sqs'
@@ -82,7 +83,7 @@ def reportBack():
     )
 
 def receiveMessage(url):
-    print('listening to queue')
+    print('listening to SQS')
     response = sqsclient.receive_message(
         QueueUrl = url,
         WaitTimeSeconds = 20
@@ -121,11 +122,11 @@ def getlog():
         totalnum = totalnum + int(text.split(':')[1])
         obj.delete()
 
-    print('Total VM time took is: '+str(totaltime) + 'Total number tested is: '+str(totalnum))
+    print('Total time for all VM used: '+str(totaltime) + ' Total number tested is: '+str(totalnum))
     #remove everything after finish getting log
 
 def quitprog():
-    print ('total time took (including spinning up VM): ' + str(time.process_time()-t0))
+    print ('total time took (including spinning up VM): ' + str(timeit.default_timer()-t0))
     exit()
 
 
@@ -139,7 +140,7 @@ if __name__ == '__main__':
     if (len(sys.argv)!=2):
         print('wrong arg')
         exit()
-    t0 = time.process_time()
+    t0 = timeit.default_timer()
     ec2 = boto3.resource('ec2')
     sqs = boto3.resource('sqs')
     s3client = boto3.client('s3')

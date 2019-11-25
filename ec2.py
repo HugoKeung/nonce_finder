@@ -6,9 +6,10 @@ import time
 import os
 import threading
 import _thread
+import timeit
 
 BLOCK = 'COMSM0010cloud'
-LEADINGZERO = 2
+LEADINGZERO = 4
 
 
 #turn string to binary
@@ -28,7 +29,7 @@ def addnonce(st, i):
 
 #First nonce is added, with nonce being 'i', then it is turned into binary and SHA256 is applied twice
 def wholehashoperation(st, i):
-#    print(tosha(tosha(tobin(addnonce(st, i)))))
+    #print(tosha(tosha(tobin(addnonce(st, i)))))
     return tosha(tosha(tobin(addnonce(st,i))))
 
 
@@ -84,6 +85,7 @@ def sendlog():
 
 #TODO receive message sync
 if __name__ == '__main__':
+    print('starting script')
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
     sqsclient = boto3.client('sqs')
@@ -96,7 +98,7 @@ if __name__ == '__main__':
     end = int(sys.argv[2])
     queueurl = sys.argv[3]
     #t0 = time.clock()
-    t0 = time.process_time()
+    t0 = timeit.default_timer()
     
     try:
         threading.Thread(target = receiveMessageInThread, args=(queueurl,)).start()
@@ -105,15 +107,13 @@ if __name__ == '__main__':
 
     for i in range (start, end):
         numTested = numTested + 1
-        print('testing num')    
-        time.sleep(1)
+        
         if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
-            print('above is golden nonce, the nonce number is ', i)
-            totalTime = time.process_time()-t0
+         #   print('!!!!!!!!!above is golden nonce, the nonce number is ', i)
+            totalTime = timeit.default_timer()-t0
             nonceFound = 1
             #totalTime = time.clock()-t0
-
-            reportBack(queueurl, '!nonce number is '+ str(i) + 'time took is ' + str(totalTime))
+            reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
             exit()
     print('no nonce')  
     reportBack(queueurl, 'No nonce found')
