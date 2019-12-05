@@ -10,8 +10,6 @@ import timeit
 import urllib.request
 
 BLOCK = 'COMSM0010cloud'
-LEADINGZERO = 6
-
 
 #turn string to binary
 def tobin(st):
@@ -69,11 +67,9 @@ def receiveMessage(url):
                 done=1
                 print(message.get('Body'))
                 sendlog()
-                shutdown()
-
+                os.exit(1)
 def receiveMessageInThread(url):
     global done
-    global logsent
     while (done==0):
         receiveMessage(url)
 
@@ -84,14 +80,9 @@ def sendlog():
     reportBack(queueurl,'sending log from{0}'.format(start))
     log.close()
     s3 = boto3.resource('s3')
-    s3.Bucket('16187tester').upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
+    s3.Bucket(bucket).upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
     print('log uploaded')
     logsent=1
-
-def shutdown():
-    while(1):
-        if logsent==1:
-            ec2.instances.filter(InstanceIds=[instance_id]).terminate()
 
 #Can put script. in S3 then use shell script to initiate the python script when setting up new instances
 #need to 1. send log to s3 after complete. 2. send message to SQS
@@ -110,11 +101,13 @@ if __name__ == '__main__':
     totalTime = 0
     nonceFound = 0
     done=0
-    logsent=0
+  
 
     start = int(sys.argv[1])
     end = int(sys.argv[2])
-    queueurl = sys.argv[3]
+    leading_zero = int(sys.argv[3])
+    queueurl = sys.argv[4]
+    bucket = sys.argv[5]
     response = urllib.request.urlopen("http://169.254.169.254/latest/meta-data/instance-id")
     instance_id = response.read().decode('utf-8')
 
@@ -130,19 +123,15 @@ if __name__ == '__main__':
     for i in range (start, end):
         numTested = numTested + 1
         
-        if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
+        if goldennonce(wholehashoperation(BLOCK, i), leading_zero) == 1:
             print('!!!!!!!!!above is golden nonce, the nonce number is ', i)
             totalTime = timeit.default_timer()-t0
             nonceFound = 1
             done=1
             reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
             sendlog()
-            shutdown()
-        if done==1:
-            shutdown()
     print('no nonce')  
     reportBack(queueurl, 'No nonce found within range {0} and {1}'.format(start, end))
     sendlog()
-    shutdown()
 
 
