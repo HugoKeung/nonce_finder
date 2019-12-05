@@ -7,9 +7,10 @@ import os
 import threading
 import _thread
 import timeit
+import requests
 
 BLOCK = 'COMSM0010cloud'
-LEADINGZERO = 5
+LEADINGZERO = 3
 
 
 #turn string to binary
@@ -44,7 +45,7 @@ def goldennonce(st, d):
 def reportBack(url, message):
    # print('!!reporting back to SQS')
     #it is only calling this function when either nonce is found or all numbers allocated are tested
-    sendlog()
+  #  sendlog()
     response = sqsclient.send_message(
         QueueUrl= url,
         MessageBody = message
@@ -58,13 +59,13 @@ def receiveMessage(url):
         WaitTimeSeconds = 5
     )
     #send log every 20 secodns for 'backup' just in case if the client terminate the ec2 before they can send log
-    sendlog()
+   # sendlog()
     #print(response.get('Messages')[0].get('Body'))
     if 'Messages' in response:
         if (response.get('Messages')[0].get('Body')[0]== '!'):
             #this means a nonce is found, so now pack up and go
             print('nonce found by someone else')
-            sendlog()
+           # sendlog()
             #shutdown()
             os._exit(1)
 
@@ -93,9 +94,10 @@ if __name__ == '__main__':
     print('starting script')
     t0 = timeit.default_timer()
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-
     sqsclient = boto3.client('sqs')
-
+    response = requests.get('http://169.254.169.254/latest/meta_data/instance-id')
+    instance_id = response.text
+    print(instance_id)
     numTested = 0
     totalTime = 0
     nonceFound = 0
@@ -122,11 +124,11 @@ if __name__ == '__main__':
             nonceFound = 1
             #totalTime = time.clock()-t0
             reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
-            sendlog()
+           # sendlog()
             os._exit(1)
     print('no nonce')  
     reportBack(queueurl, 'No nonce found within range {0} and {1}'.format(start, end))
-    sendlog()
+    #sendlog()
     os._exit(1)
 
 

@@ -7,9 +7,10 @@ import os
 import threading
 import _thread
 import timeit
+import urllib.request
 
 BLOCK = 'COMSM0010cloud'
-LEADINGZERO = 5
+LEADINGZERO = 6
 
 
 #turn string to binary
@@ -44,7 +45,7 @@ def goldennonce(st, d):
 def reportBack(url, message):
    # print('!!reporting back to SQS')
     #it is only calling this function when either nonce is found or all numbers allocated are tested
-    sendlog()
+  #  sendlog()
     response = sqsclient.send_message(
         QueueUrl= url,
         MessageBody = message
@@ -58,30 +59,39 @@ def receiveMessage(url):
         WaitTimeSeconds = 5
     )
     #send log every 20 secodns for 'backup' just in case if the client terminate the ec2 before they can send log
-    sendlog()
+   # sendlog()
     #print(response.get('Messages')[0].get('Body'))
     if 'Messages' in response:
-        if (response.get('Messages')[0].get('Body')[0]== '!'):
-            #this means a nonce is found, so now pack up and go
-            print('nonce found by someone else')
-            sendlog()
-            #shutdown()
-            os._exit(1)
+        for message in response.get('Messages'):
+            
+            print(message.get('Body'))
+            if (message.get('Body')[0]== '!'):
+                done=1
+                print(message.get('Body'))
+                sendlog()
+                shutdown()
 
 def receiveMessageInThread(url):
-    while (1):
+    global done
+    global logsent
+    while (done==0):
         receiveMessage(url)
 
 def sendlog():
     log = open('!{0}.txt'.format(start), 'w')
     timenow = timeit.default_timer()-t0
-  #  log.write('Time:{0} Number tested:{1} Nonce found:{2}'.format(totalTime, numTested, nonceFound))
     log.write(str(timenow)+':'+str(numTested)+':'+str(nonceFound))
-    
+    reportBack(queueurl,'sending log from{0}'.format(start))
     log.close()
     s3 = boto3.resource('s3')
     s3.Bucket('16187tester').upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
     print('log uploaded')
+    logsent=1
+
+def shutdown():
+    while(1):
+        if logsent==1:
+            ec2.instances.filter(InstanceIds=[instance_id]).terminate()
 
 #Can put script. in S3 then use shell script to initiate the python script when setting up new instances
 #need to 1. send log to s3 after complete. 2. send message to SQS
@@ -91,23 +101,27 @@ def sendlog():
 #TODO threading cause wrong number for number tester variable
 if __name__ == '__main__':
     print('starting script')
-    t0 = timeit.default_timer()
+
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-
     sqsclient = boto3.client('sqs')
-
+    ec2 = boto3.resource('ec2')
+    
     numTested = 0
     totalTime = 0
     nonceFound = 0
+    done=0
+    logsent=0
 
     start = int(sys.argv[1])
     end = int(sys.argv[2])
     queueurl = sys.argv[3]
+    response = urllib.request.urlopen("http://169.254.169.254/latest/meta-data/instance-id")
+    instance_id = response.read().decode('utf-8')
+
     startmessage = 'script is starting for number {0} to {1}'.format(start, end)
     reportBack(queueurl, startmessage)
-    #t0 = time.clock()
-    
-    
+    receiveMessage(queueurl)
+    t0 = timeit.default_timer()
     try:
         threading.Thread(target = receiveMessageInThread, args=(queueurl,)).start()
     except:
@@ -120,14 +134,15 @@ if __name__ == '__main__':
             print('!!!!!!!!!above is golden nonce, the nonce number is ', i)
             totalTime = timeit.default_timer()-t0
             nonceFound = 1
-            #totalTime = time.clock()-t0
+            done=1
             reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
             sendlog()
-            os._exit(1)
+            shutdown()
+        if done==1:
+            shutdown()
     print('no nonce')  
     reportBack(queueurl, 'No nonce found within range {0} and {1}'.format(start, end))
     sendlog()
-    os._exit(1)
-
+    shutdown()
 
 
