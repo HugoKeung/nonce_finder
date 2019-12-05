@@ -1,12 +1,21 @@
-This is a piece of code that find the 'golden nonce'. It is run on multiple AWS server to achieve parallelism for a faster runtime.
+This is a piece of code that find the 'golden nonce'. The 'block' of data that we will be adding a nonce value to is 'COMSM0010cloud', with each characters encoded as ASCII and converted to binary at the end. This binary value will then be hashed through SHA256 for two times. If the number of leading '0' in the hashed value is equal to or higher than the difficulty user specified then the value is considered as a 'golden nonce'.
 
-user input: N, the number of VM to run the code on
-(or the number of hours the user want before computing the nonce value)
-user input: D, the difficulty of nonce discovery
-user input: T, timeout time before stopping the operation
-user input: S, maximum expenditure limit before stopping the operation
+User can specify the number of AWS EC2 to run on to achieve parallelism for a faster runtime. Once the 'golden nonce' is found, the value will be printed out and any EC2 created for the task will be terminated. 
+Please ensure the following is installed before running the script
+- Python3
+- Boto3
 
-all VM will be closed down once a golden once is found and report the nonce value back to the user.
-user can terminate operation anny time and log file containing details from start to finish will be returned to the user.
+AWS credentials also has to be set up on the local machine. This can be done through AWSCLI or setting it up directly through the credentials file under ~/.aws/credentials of your local machine.
+For a more detailed information on how to set up your local aws credentials, please refer to the following link:
+https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html#configuration 
 
-the 'block' of data that we will be adding nonce to is 'COMSM0010cloud' with each character converted to binary via ASCII. The nonce added will be a 32 bit number in binary
+To run the script type in the following command
+python3 client.py <N> <D> <T>
+with <N> being the number of VM to run the code on
+with <D> being the difficulty. It is the number of leading zeros you want to find in the nonce value.
+with <T> being the timeout (in seconds) before the programme shuts itself. The time starts counting when user run the script. Put in 0 if you prefer not to have a timeout.
+
+*Beware that since the EC2 usually take 60-120 seconds before fully started up, so any time under 60-120 seconds may mean that the EC2 will be shutdown right after it is started up and no meaningful computation will be made.
+
+
+
