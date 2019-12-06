@@ -1,9 +1,9 @@
-**What is this?**
+## What is this?
 
 This is a piece of code that find the 'golden nonce'. The 'block' of data that we will be adding a nonce value to is 'COMSM0010cloud', with each characters encoded as ASCII and converted to binary at the end. This binary value will then be hashed through SHA256 for two times. If the number of leading '0' in the hashed value is equal to or higher than the difficulty user specified then the value is considered as a 'golden nonce'.
 User can specify the number of AWS EC2 to run on to achieve parallelism for a faster runtime. Once the 'golden nonce' is found, the value will be printed out and any EC2 created for the task will be terminated. 
 
-**Before running the script...**
+## Before running the script...
 
 Please ensure the following is installed before running the script
 - Python3
@@ -22,7 +22,7 @@ To run the script type in the following command
 `python3 client.py N D T`
 - with 'N' being the number of VM to run the code on
 - with 'D' being the difficulty. It is the number of leading zeros you want to find in the nonce value.
-- with 'T' being the timeout (in seconds) before the programme shuts itself. The time starts counting when user run the script. Put in 0 if you prefer not to have a timeout.
+- with 'T' being the timeout (in seconds) before the programme shuts itself. The time starts counting when user run the script. **_Put in 0 if you prefer not to have a timeout._**
 
 User can also press Ctrl+C to interrupt the programme. Log will be pulled from the EC2 before exiting.
 
