@@ -21,6 +21,8 @@ with <N> being the number of VM to run the code on
 with <D> being the difficulty. It is the number of leading zeros you want to find in the nonce value.
 with <T> being the timeout (in seconds) before the programme shuts itself. The time starts counting when user run the script. Put in 0 if you prefer not to have a timeout.
 
+User can also press Ctrl+C to interrupt the programme. Log will be pulled from the EC2 before exiting.
+
 *Beware that since the EC2 usually take 60-120 seconds before fully started up, so any time under 60-120 seconds may mean that the EC2 will be shutdown right after it is started up and no meaningful computation will be made.
 
 
