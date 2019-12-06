@@ -56,9 +56,7 @@ def receiveMessage(url):
         QueueUrl = url,
         WaitTimeSeconds = 5
     )
-    #send log every 20 secodns for 'backup' just in case if the client terminate the ec2 before they can send log
-   # sendlog()
-    #print(response.get('Messages')[0].get('Body'))
+
     if 'Messages' in response:
         for message in response.get('Messages'):
             
@@ -67,7 +65,7 @@ def receiveMessage(url):
                 done=1
                 print(message.get('Body'))
                 sendlog()
-                os.exit(1)
+               
 def receiveMessageInThread(url):
     global done
     while (done==0):
@@ -83,6 +81,7 @@ def sendlog():
     s3.Bucket(bucket).upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
     print('log uploaded')
     logsent=1
+    os._exit(0)
 
 #Can put script. in S3 then use shell script to initiate the python script when setting up new instances
 #need to 1. send log to s3 after complete. 2. send message to SQS
@@ -125,11 +124,13 @@ if __name__ == '__main__':
         
         if goldennonce(wholehashoperation(BLOCK, i), leading_zero) == 1:
             print('!!!!!!!!!above is golden nonce, the nonce number is ', i)
+            
             totalTime = timeit.default_timer()-t0
             nonceFound = 1
             done=1
             reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
             sendlog()
+           
     print('no nonce')  
     reportBack(queueurl, 'No nonce found within range {0} and {1}'.format(start, end))
     sendlog()

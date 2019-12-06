@@ -2,23 +2,17 @@ import binascii
 import hashlib
 import boto3
 import sys
-import time
 import os
-import threading
-import _thread
 import timeit
+import urllib.request
+import multiprocessing
+from multiprocessing import Value
 
 BLOCK = 'COMSM0010cloud'
-LEADINGZERO = 5
-
 
 #turn string to binary
 def tobin(st):
     return ''.join('{:08b}'.format(b) for b in st.encode('ascii'))
-    #print(st, ''.join(format(ord(x), 'b') for x in st.encode('ascii')))
-    #return ''.join(format(ord(x, 'b') for x in st.encode('ascii')))
-
-#will be used after turning sstring to binary using tobin function
 
 def tosha(st):
     return hashlib.sha256(st.encode('ascii')).hexdigest()
@@ -29,7 +23,7 @@ def addnonce(st, i):
 
 #First nonce is added, with nonce being 'i', then it is turned into binary and SHA256 is applied twice
 def wholehashoperation(st, i):
-    #print(tosha(tosha(tobin(addnonce(st, i)))))
+  
     return tosha(tosha(tobin(addnonce(st,i))))
 
 
@@ -42,46 +36,62 @@ def goldennonce(st, d):
     else: return 0
 
 def reportBack(url, message):
-   # print('!!reporting back to SQS')
-    #it is only calling this function when either nonce is found or all numbers allocated are tested
-    sendlog()
     response = sqsclient.send_message(
         QueueUrl= url,
         MessageBody = message
     )
     
+               
+def receiveMessageInThread(url,done):
+    while (done.value==0):
 
-def receiveMessage(url):
-    #print('listening to SQS')
-    response = sqsclient.receive_message(
-        QueueUrl = url,
-        WaitTimeSeconds = 5
-    )
-    #send log every 20 secodns for 'backup' just in case if the client terminate the ec2 before they can send log
-    sendlog()
-    #print(response.get('Messages')[0].get('Body'))
-    if 'Messages' in response:
-        if (response.get('Messages')[0].get('Body')[0]== '!'):
-            #this means a nonce is found, so now pack up and go
-            print('nonce found by someone else')
-            sendlog()
-            #shutdown()
-            os._exit(1)
+        response = sqsclient.receive_message(
+            QueueUrl = url,
+            WaitTimeSeconds = 20
+        )
+        if 'Messages' in response:
+            for message in response.get('Messages'):
+                
+                print(message.get('Body'))
+                if (message.get('Body')[0]== '!'):
+                    done.value=1
+                    print(message.get('Body'))
+    
 
-def receiveMessageInThread(url):
-    while (1):
-        receiveMessage(url)
-
-def sendlog():
+def sendlog(num, time, find):
     log = open('!{0}.txt'.format(start), 'w')
     timenow = timeit.default_timer()-t0
-  #  log.write('Time:{0} Number tested:{1} Nonce found:{2}'.format(totalTime, numTested, nonceFound))
-    log.write(str(timenow)+':'+str(numTested)+':'+str(nonceFound))
-    
+    log.write(str(time)+':'+str(num)+':'+str(find))
+    reportBack(queueurl,'sending log from{0}'.format(start))
     log.close()
     s3 = boto3.resource('s3')
-    s3.Bucket('16187tester').upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
+    s3.Bucket(bucket).upload_file('!{0}.txt'.format(start), 'result/!{0}.txt'.format(start))
     print('log uploaded')
+    logsent=1
+    os._exit(0)
+
+def findloop(t0):
+    
+    numTested = 0
+    totalTime = 0
+    nonceFound = 0
+    for i in range (start, end):
+        numTested = numTested + 1
+    
+        if goldennonce(wholehashoperation(BLOCK, i), leading_zero) == 1:
+            totalTime = timeit.default_timer()-t0
+            nonceFound = 1
+            done.value=1
+            reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
+            sendlog(numTested, totalTime, nonceFound)
+        if done.value ==1:
+            totalTime = timeit.default_timer()-t0
+            sendlog(numTested, totalTime, nonceFound)
+           
+    print('no nonce')  
+    reportBack(queueurl, 'No nonce found within range {0} and {1}'.format(start, end))
+    sendlog(numTested, totalTime, nonceFound)
+
 
 #Can put script. in S3 then use shell script to initiate the python script when setting up new instances
 #need to 1. send log to s3 after complete. 2. send message to SQS
@@ -91,43 +101,28 @@ def sendlog():
 #TODO threading cause wrong number for number tester variable
 if __name__ == '__main__':
     print('starting script')
-    t0 = timeit.default_timer()
+
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-
     sqsclient = boto3.client('sqs')
-
-    numTested = 0
-    totalTime = 0
-    nonceFound = 0
-
+    ec2 = boto3.resource('ec2')
+    t0 = timeit.default_timer()
+    done = Value('i', 0)
     start = int(sys.argv[1])
     end = int(sys.argv[2])
-    queueurl = sys.argv[3]
+    leading_zero = int(sys.argv[3])
+    queueurl = sys.argv[4]
+    bucket = sys.argv[5]
+    # response = urllib.request.urlopen("http://169.254.169.254/latest/meta-data/instance-id")
+    # instance_id = response.read().decode('utf-8')
+
     startmessage = 'script is starting for number {0} to {1}'.format(start, end)
     reportBack(queueurl, startmessage)
-    #t0 = time.clock()
     
-    
-    try:
-        threading.Thread(target = receiveMessageInThread, args=(queueurl,)).start()
-    except:
-        print ('unable to start thread, calculation will not stop till the end')
-
-    for i in range (start, end):
-        numTested = numTested + 1
-        
-        if goldennonce(wholehashoperation(BLOCK, i), LEADINGZERO) == 1:
-            print('!!!!!!!!!above is golden nonce, the nonce number is ', i)
-            totalTime = timeit.default_timer()-t0
-            nonceFound = 1
-            #totalTime = time.clock()-t0
-            reportBack(queueurl, '!nonce number is '+ str(i) + ' Time took is ' + str(totalTime))
-            sendlog()
-            os._exit(1)
-    print('no nonce')  
-    reportBack(queueurl, 'No nonce found within range {0} and {1}'.format(start, end))
-    sendlog()
-    os._exit(1)
-
+    p1 = multiprocessing.Process(target = receiveMessageInThread, args=(queueurl,done))
+    p1.start()
+  
+    p2 = multiprocessing.Process(target = findloop, args=(t0,))
+    p2.start()
+    p2.join()
 
 
