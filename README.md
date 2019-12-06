@@ -1,8 +1,8 @@
-What is this?
+**What is this?**
 This is a piece of code that find the 'golden nonce'. The 'block' of data that we will be adding a nonce value to is 'COMSM0010cloud', with each characters encoded as ASCII and converted to binary at the end. This binary value will then be hashed through SHA256 for two times. If the number of leading '0' in the hashed value is equal to or higher than the difficulty user specified then the value is considered as a 'golden nonce'.
 User can specify the number of AWS EC2 to run on to achieve parallelism for a faster runtime. Once the 'golden nonce' is found, the value will be printed out and any EC2 created for the task will be terminated. 
 
-Before running the script...
+**Before running the script...**
 Please ensure the following is installed before running the script
 - Python3
 - Boto3
